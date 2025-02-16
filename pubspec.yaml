@@ -13,7 +13,8 @@ environment:
 dependencies:
   agora_rtc_engine: ^6.5.0
   agora_rtm:
-    path: lib/agora_rtm_1.5
+    git:
+      url: https://github.com/dsaved/agora_rtm_1.5.git
   flutter:
     sdk: flutter
   http: ">=0.13.1 <2.0.0"
