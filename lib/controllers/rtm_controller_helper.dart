@@ -1,122 +1,124 @@
 import 'dart:convert';
+import 'dart:developer';
 
+import 'package:agora_rtm/agora_rtm.dart';
+import 'package:agora_uikit/controllers/rtm_channel_event_handler.dart';
 import 'package:agora_uikit/controllers/session_controller.dart';
+import 'package:agora_uikit/models/agora_rtm_channel_event_handler.dart';
 import 'package:agora_uikit/models/agora_rtm_mute_request.dart';
+import 'package:agora_uikit/models/rtm_message.dart';
 import 'package:agora_uikit/src/enums.dart';
 
-void messageReceived({
-  required String messageType,
-  required Map<String, dynamic> message,
-  required SessionController sessionController,
-}) {
-  switch (messageType) {
-    case "UserData":
-      message.forEach((key, val) {
-        if (key == "text") {
-          var userData = UserData.fromJson(jsonDecode(val.toString()));
-          String rtmId = userData.rtmId;
-          int rtcId = userData.rtcId;
-          _addToUidUserMap(
-            rtcId: rtcId,
-            rtmId: rtmId,
-            sessionController: sessionController,
-          );
-          _addToUserRtmMap(
-            rtmId: rtmId,
-            message: message,
-            sessionController: sessionController,
-          );
-        }
-      });
-      break;
-    case "MuteRequest":
-      bool? muted;
-      int? deviceId;
-      message.forEach((key, val) {
-        if (key == "text") {
-          var muteRequest = MuteRequest.fromJson(jsonDecode(val.toString()));
-          muted = muteRequest.mute;
-          deviceId = muteRequest.device;
-        }
-      });
-      if (deviceId == 0) {
-        sessionController.value = sessionController.value.copyWith(
-          displaySnackbar: true,
-          cameraRequest: muted! ? CameraState.enabled : CameraState.disabled,
-          showMicMessage: false,
-          showCameraMessage: true,
-        );
-      } else if (deviceId == 1) {
-        sessionController.value = sessionController.value.copyWith(
-          displaySnackbar: true,
-          muteRequest: muted! ? MicState.unmuted : MicState.muted,
-          showCameraMessage: false,
-          showMicMessage: true,
-        );
-      }
-
-      Future.delayed(Duration(seconds: 10), () {
-        sessionController.value = sessionController.value.copyWith(
-          displaySnackbar: false,
-          showCameraMessage: false,
-        );
-      });
-      break;
-    default:
-  }
+/// Function to join the RTM channel and send the user data to everyone inside that channel.
+Future<void> rtmMethods(
+    {required AgoraRtmChannelEventHandler agoraRtmChannelEventHandler,
+    required SessionController sessionController}) async {
+  await _loginToRtm(sessionController);
+  await _joinRtmChannel(
+    agoraRtmChannelEventHandler,
+    sessionController,
+  );
+  await sendUserData(
+    toChannel: true,
+    username: sessionController.value.connectionData!.username!,
+    sessionController: sessionController,
+  );
 }
 
-void _addToUidUserMap(
-    {required int rtcId,
-    required String rtmId,
-    required SessionController sessionController}) {
-  Map<int, String> tempMap = {};
-  tempMap.addAll(sessionController.value.uidToUserIdMap ?? {});
-  if (rtcId != 0) {
-    tempMap.putIfAbsent(rtcId, () => rtmId);
-  }
-  sessionController.value =
-      sessionController.value.copyWith(uidToUserIdMap: tempMap);
-}
-
-void _addToUserRtmMap({
-  required String rtmId,
-  required Map<String, dynamic> message,
-  required SessionController sessionController,
-}) {
-  Map<String, Map<String, dynamic>> tempMap = {};
-  tempMap.addAll(sessionController.value.userRtmMap ?? {});
-  tempMap.putIfAbsent(rtmId, () => message);
-  sessionController.value =
-      sessionController.value.copyWith(userRtmMap: tempMap);
-}
-
-void removeFromUidToUserMap({
-  required int rtcId,
-  required SessionController sessionController,
-}) {
-  Map<int, String> tempMap = {};
-  tempMap = sessionController.value.uidToUserIdMap!;
-  for (int i = 0; i < tempMap.length; i++) {
-    if (tempMap.keys.elementAt(i) == rtcId) {
-      tempMap.remove(rtcId);
+Future<void> _loginToRtm(SessionController sessionController) async {
+  if (!sessionController.value.isLoggedIn) {
+    try {
+      await sessionController.value.agoraRtmClient?.login(
+        sessionController.value.connectionData!.tempRtmToken ??
+            sessionController.value.generatedRtmToken,
+        sessionController.value.generatedRtmId!,
+      );
+      sessionController.value =
+          sessionController.value.copyWith(isLoggedIn: true);
+      log(
+        'Username : ${sessionController.value.connectionData!.username} and rtmId : ${sessionController.value.generatedRtmId} logged in',
+        level: Level.info.value,
+      );
+    } catch (e) {
+      log(
+        'Error occurred while trying to login. ${e.toString()}',
+        level: Level.error.value,
+      );
     }
   }
-  sessionController.value =
-      sessionController.value.copyWith(uidToUserIdMap: tempMap);
 }
 
-void removeFromUserRtmMap({
-  required String rtmId,
+Future<AgoraRtmChannel?> _createChannel({
+  required String rtmChannelName,
+  required AgoraRtmChannelEventHandler agoraRtmChannelEventHandler,
   required SessionController sessionController,
-}) {
-  Map<String, Map<String, dynamic>> tempMap = {};
-  tempMap = sessionController.value.userRtmMap!;
-  for (int i = 0; i < tempMap.length; i++) {
-    if (tempMap.keys.elementAt(i) == rtmId) {
-      tempMap.remove(rtmId);
+}) async {
+  AgoraRtmChannel? channel = await sessionController.value.agoraRtmClient
+      ?.createChannel(rtmChannelName);
+
+  if (channel != null) {
+    await rtmChannelEventHandler(
+      channel: channel,
+      agoraRtmChannelEventHandler: agoraRtmChannelEventHandler,
+      sessionController: sessionController,
+    );
+  }
+  return channel;
+}
+
+Future<void> _joinRtmChannel(
+    AgoraRtmChannelEventHandler agoraRtmChannelEventHandler,
+    SessionController sessionController) async {
+  if (!sessionController.value.isInChannel) {
+    try {
+      sessionController.value = sessionController.value.copyWith(
+        agoraRtmChannel: await _createChannel(
+          rtmChannelName:
+              sessionController.value.connectionData?.rtmChannelName ??
+                  sessionController.value.connectionData!.channelName,
+          agoraRtmChannelEventHandler: agoraRtmChannelEventHandler,
+          sessionController: sessionController,
+        ),
+      );
+      await sessionController.value.agoraRtmChannel?.join();
+      sessionController.value =
+          sessionController.value.copyWith(isInChannel: true);
+    } catch (e) {
+      log('RTM Join channel error : ${e.toString()}', level: Level.error.value);
     }
   }
-  sessionController.value =
-      sessionController.value.copyWith(userRtmMap: tempMap);
+}
+
+Future<void> sendUserData({
+  required bool toChannel,
+  required String username,
+  String? peerRtmId,
+  required SessionController sessionController,
+}) async {
+  int ts = DateTime.now().millisecondsSinceEpoch;
+
+  var userData = UserData(
+    rtmId: sessionController.value.generatedRtmId!,
+    rtcId: sessionController.value.localUid,
+    username: username,
+    role: sessionController.value.clientRoleType.index,
+  );
+
+  var json = jsonEncode(userData);
+
+  Message message = Message(text: json, ts: ts, offline: false);
+  RtmMessage msg = RtmMessage.fromText(message.text);
+
+  if (sessionController.value.agoraRtmChannel != null && toChannel) {
+    await sessionController.value.agoraRtmChannel?.sendMessage2(msg);
+    log('User data sent to channel', level: Level.info.value);
+  } else if (sessionController.value.agoraRtmClient != null &&
+      !toChannel &&
+      peerRtmId != null) {
+    await sessionController.value.agoraRtmClient
+        ?.sendMessageToPeer2(peerRtmId, msg);
+    log('User data sent to peer', level: Level.info.value);
+  } else {
+    log("No user in the channel", level: Level.warning.value);
+  }
 }

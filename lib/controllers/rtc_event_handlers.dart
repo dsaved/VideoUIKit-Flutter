@@ -2,12 +2,13 @@ import 'dart:developer';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:agora_uikit/controllers/rtc_token_handler.dart';
-import 'package:agora_uikit/controllers/rtm_controller.dart';
 import 'package:agora_uikit/controllers/session_controller.dart';
 import 'package:agora_uikit/models/agora_rtc_event_handlers.dart';
 import 'package:agora_uikit/models/agora_rtm_channel_event_handler.dart';
 import 'package:agora_uikit/models/agora_user.dart';
 import 'package:agora_uikit/src/enums.dart';
+
+import 'rtm_controller_helper.dart';
 
 Future<RtcEngineEventHandler> rtcEngineEventHandler(
   AgoraRtcEventHandlers agoraEventHandlers,
@@ -62,7 +63,7 @@ Future<RtcEngineEventHandler> rtcEngineEventHandler(
     agoraEventHandlers.onFirstLocalVideoFrame
         ?.call(source, width, height, elapsed);
   }, onFirstLocalVideoFramePublished: (source, elapsed) {
-    agoraEventHandlers.onFirstLocalVideoFramePublished?.call(source, elapsed);
+    agoraEventHandlers.onFirstLocalVideoFramePublished?.call(VideoSourceType.videoSourceCamera, elapsed);
   }, onFirstRemoteAudioDecoded: (connection, uid, elapsed) {
     agoraEventHandlers.onFirstRemoteAudioDecoded
         ?.call(connection, uid, elapsed);
@@ -117,7 +118,7 @@ Future<RtcEngineEventHandler> rtcEngineEventHandler(
   }, onLastmileProbeResult: (result) {
     agoraEventHandlers.onLastmileProbeResult?.call(result);
   }, onLocalVideoStats: (source, stats) {
-    agoraEventHandlers.onLocalVideoStats?.call(source, stats);
+    agoraEventHandlers.onLocalVideoStats?.call(VideoSourceType.videoSourceCamera, stats);
   }, onLocalAudioStats: (connection, stats) {
     agoraEventHandlers.onLocalAudioStats?.call(connection, stats);
   }, onRemoteVideoStats: (connection, stats) {
@@ -302,15 +303,6 @@ Future<RtcEngineEventHandler> rtcEngineEventHandler(
     agoraEventHandlers.onCameraReady?.call();
   }, onEncryptionError: (connection, errorType) {
     agoraEventHandlers.onEncryptionError?.call(connection, errorType);
-  }, onExtensionError: (provider, extension, error, message) {
-    agoraEventHandlers.onExtensionError
-        ?.call(provider, extension, error, message);
-  }, onExtensionEvent: (provider, extension, key, value) {
-    agoraEventHandlers.onExtensionEvent?.call(provider, extension, key, value);
-  }, onExtensionStarted: (provider, extension) {
-    agoraEventHandlers.onExtensionStarted?.call(provider, extension);
-  }, onExtensionStopped: (provider, extension) {
-    agoraEventHandlers.onExtensionStopped?.call(provider, extension);
   }, onIntraRequestReceived: (connection) {
     agoraEventHandlers.onIntraRequestReceived?.call(connection);
   }, onPermissionError: (permissionType) {

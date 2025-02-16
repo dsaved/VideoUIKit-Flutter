@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:developer';
 
 import 'package:agora_rtm/agora_rtm.dart';
-import 'package:agora_uikit/controllers/rtm_controller_helper.dart';
 import 'package:agora_uikit/controllers/rtm_token_handler.dart';
 import 'package:agora_uikit/controllers/session_controller.dart';
 import 'package:agora_uikit/models/agora_rtm_client_event_handler.dart';
 import 'package:agora_uikit/models/rtm_message.dart';
 import 'package:agora_uikit/src/enums.dart';
+
+import 'rtm_controller.dart';
 
 Future<void> rtmClientEventHandler({
   required AgoraRtmClient agoraRtmClient,
